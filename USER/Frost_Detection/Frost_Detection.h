@@ -73,6 +73,25 @@ typedef enum {
     INTERVENTION_FANS_THEN_HEATERS // 风扇+加热组合
 } InterventionMethod_t;
 
+
+/*
+ ===============================================================================
+                            【新增】: 统一的系统状态结构体
+ ===============================================================================
+*/
+/**
+ * @brief 聚合所有需要上传到云平台的系统状态和数据
+ */
+ typedef struct {
+    EnvironmentalData_t* env_data;      // 指向环境数据的指针
+    SystemCapabilities_t* capabilities; // 指向系统能力的指针
+    InterventionMethod_t method;        // 当前决策的干预方法
+    uint8_t fan_power;                  // 当前计算的风扇功率 (%)
+    int crop_stage;                     // 当前作物生长阶段
+} SystemStatus_t;
+
+
+
 InversionLayerInfo_t Analyze_Inversion_Layer(EnvironmentalData_t* env_data);
 InterventionMethod_t Determine_Optimal_Intervention(InversionLayerInfo_t* inversion, SystemCapabilities_t* capabilities, EnvironmentalData_t* env_data, float critical_temp);
 uint8_t calculate_fan_power(InversionLayerInfo_t* risk_info, float wind_speed);

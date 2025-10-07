@@ -3,7 +3,7 @@
 
 #include <stdbool.h> // 引入布尔类型
 #include <stdint.h>  // 引入标准整型
-
+#include "Frost_Detection.h" // 确保包含了 SystemStatus_t 的定义
 /*
  ===============================================================================
                             1. 用户配置区域
@@ -69,5 +69,6 @@ void MQTT_Post_Frost_Alert_Event(float current_temp);
 void MQTT_Publish_All_Data(const DeviceStatus* status);
 void Handle_Serial_Reception(void);
 
+void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status);
 
 #endif // __ONENET_MQTT_H

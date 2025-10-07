@@ -1,6 +1,5 @@
 #include "stm32f10x.h"
 #include "stm32f10x_conf.h"
-#include "UART_DISPLAY.h"
 #include "UART_SENSOR.h"
 #include "delay.h"
 #include "stm32f10x_gpio.h"
@@ -16,6 +15,8 @@
 #include "key.h"
 #include "Relay.h"
 #include "onenet_mqtt.h"
+#include "bsp_usart.h"
+
 
 // 作物霜冻临界温度（可根据作物类型调整）
 float Crop_Critical_Temp;
@@ -172,8 +173,15 @@ int main()
             printf("humidity:%f \r\n",env_data.humidity);
             printf("ambient_temp:%f C\r\n",env_data.ambient_temp);
 
+            // 1. 填充 SystemStatus_t 结构体
+            current_system_status.env_data = &env_data;
+            current_system_status.capabilities = &SysAbilities;
+            current_system_status.method = Intervention_Method;
+            current_system_status.fan_power = fan_speed;
+            current_system_status.crop_stage = current_crop_stage;
 
-            MQTT_Publish_Environment_Data(&env_data);
+
+            MQTT_Publish_All_Data_Adapt(&current_system_status);
         }
         
 

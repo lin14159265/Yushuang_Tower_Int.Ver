@@ -1,16 +1,14 @@
 #include "onenet_mqtt.h"
-
 // 包含所有必要的底层驱动和标准库头文件
 #include <stm32f10x.h>
 #include "stm32f10x_conf.h"
 #include "system_f103.h"
-#include "bsp_led.h"
 #include "bsp_usart.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-
+#include "delay.h"
 /*
  ===============================================================================
                             模块内部变量与宏定义
@@ -1140,4 +1138,47 @@ static void MQTT_Publish_Fan_Power(int fan_power)
          }
      }
  }
+
+
+
+
+ /**
+ * @brief  [V3 - 结构体版转接函数] 从主程序接收统一的系统状态，并触发MQTT上报
+ * @param  system_status: 指向包含所有数据的 SystemStatus_t 结构体的指针
+ * @note   此函数负责解包 SystemStatus_t，并将数据同步到模块内部的 g_device_status。
+ */
+void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status)
+{
+    // [健壮性检查] 确保传入的指针有效
+    if (system_status == NULL || system_status->env_data == NULL || system_status->capabilities == NULL) {
+        printf("ERROR: Invalid system status pointer passed to MQTT publish function.\r\n");
+        return;
+    }
+
+    // 步骤1: 同步环境传感器数据
+    const EnvironmentalData_t* env = system_status->env_data;
+    g_device_status.temp1 = env->temperatures[0];
+    g_device_status.temp2 = env->temperatures[1];
+    g_device_status.temp3 = env->temperatures[2];
+    g_device_status.temp4 = env->temperatures[3];
+    g_device_status.ambient_temp = env->ambient_temp;
+    g_device_status.humidity = env->humidity;
+    g_device_status.wind_speed = env->wind_speed;
+    g_device_status.pressure = env->pressure;
+
+    // 步骤2: 同步系统决策状态
+    g_device_status.intervention_status = (int)system_status->method;
+    g_device_status.fan_power = system_status->fan_power;
+    g_device_status.crop_stage = system_status->crop_stage;
+
+    // 步骤3: 同步设备可用性
+    const SystemCapabilities_t* caps = system_status->capabilities;
+    g_device_status.sprinklers_available = caps->sprinklers_available;
+    g_device_status.fans_available = caps->fans_available;
+    g_device_status.heaters_available = caps->heaters_available;
+
+    // 步骤4: 调用内部的上报函数
+    printf("INFO: Unified system status synchronized, starting publish process...\r\n");
+    MQTT_Publish_All_Data(&g_device_status);
+}
 

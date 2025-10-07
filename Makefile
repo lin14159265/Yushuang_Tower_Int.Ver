@@ -36,7 +36,7 @@ BUILD_DIR = build
 ######################################
 # C sources
 C_SOURCES =  \
-HARDWARE/MQTT/MQTT.c\
+HARDWARE/MQTT/onenet_mqtt.c\
 HARDWARE/Relay/Relay.c\
 USER/Frost_Detection/Frost_Detection.c\
 HARDWARE/key/key.c\
