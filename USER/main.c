@@ -61,8 +61,8 @@ float humidity;                      //湿度值
 int humidity_temp;
 float temperature;                   //环境温度值
 int temperature_temp;                     
-
-
+int current_crop_stage=STAGE_TIGHT_CLUSTER;
+uint8_t fan_speed = 0;
 
 int main()
 {
@@ -89,7 +89,10 @@ int main()
     //继电器初始化
     Relay_Init();
     //MQTT初始化
-    Initialize_And_Connect_MQTT();
+    Robust_Initialize_And_Connect_MQTT();
+
+    // 【修正点 1】: 在 main 函数开头定义用于打包的结构体变量
+    SystemStatus_t current_system_status;
     
    
     

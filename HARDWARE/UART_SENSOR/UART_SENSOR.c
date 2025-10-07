@@ -1,7 +1,6 @@
 #include "UART_SENSOR.h"
 #include <string.h>
 #include "delay.h"
-#include "UART_DISPLAY.h"
 #include "usart.h"
 #include "stdio.h"
 // 485 ModBUS 传感器问询码
