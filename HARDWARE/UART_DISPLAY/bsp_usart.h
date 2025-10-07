@@ -31,7 +31,7 @@
 #include <stm32f10x.h>
 #include <stdio.h>
 #include "string.h"       // C标准库头文件: 字符数组常用：strcpy()、strncpy()、strcmp()、strlen()、strnset()
-#include "stdint.h"
+
 
 /*****************************************************************************
  ** 移植配置

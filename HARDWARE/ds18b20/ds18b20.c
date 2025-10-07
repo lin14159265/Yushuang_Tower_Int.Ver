@@ -1,7 +1,7 @@
 #include "ds18b20.h"
 #include "delay.h"
 #include "usart.h"
-#include "UART_DISPLAY.h"
+ #include "bsp_usart.h"
 // 用于方便迭代的端口数组
 GPIO_TypeDef * DS18B20_PORT[DS18B20_COUNT]={
     DS18B20_PORT_0,

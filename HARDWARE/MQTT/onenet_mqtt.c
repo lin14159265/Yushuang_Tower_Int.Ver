@@ -2,13 +2,15 @@
 // 包含所有必要的底层驱动和标准库头文件
 #include <stm32f10x.h>
 #include "stm32f10x_conf.h"
-#include "system_f103.h"
+//#include "system_f103.h"
 #include "bsp_usart.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include "delay.h"
+
+
 /*
  ===============================================================================
                             模块内部变量与宏定义
@@ -48,20 +50,6 @@ DeviceStatus g_device_status = {
     .fans_available = 1,
     .heaters_available = 1
 };
-
-
-/**
- * @brief  [已更新] 毫秒级延时函数 (使用SysTick硬件定时器)
- * @param  ms: 要延时的毫秒数
- */
-static void delay_ms(uint32_t ms)
-{
-    // 直接调用您工程中提供的、基于SysTick的精确延时函数
-    System_DelayMS(ms);
-}
-
-
-
 
 
 /*
@@ -656,7 +644,6 @@ static void Process_MQTT_Message_Robust(const char* buffer)
         // 尝试解析 crop_stage 参数
         if (find_and_parse_json_int(buffer, "crop_stage", &parsed_value))
         {
-			LED3_TOGGLE;
             g_crop_stage = parsed_value; // 执行命令：更新全局变量
             printf("ACTION: Cloud set 'crop_stage' to %d\r\n", g_crop_stage);
             
@@ -668,7 +655,6 @@ static void Process_MQTT_Message_Robust(const char* buffer)
         // 尝试解析 fan_power 参数
         else if (find_and_parse_json_int(buffer, "fan_power", &parsed_value))
         {
-            LED3_TOGGLE; // 使用LED提示收到指令
             
             // [健壮性设计] 对接收到的值进行范围检查和限制
             if (parsed_value < FAN_MIN_POWER) {
@@ -739,6 +725,7 @@ static void Process_MQTT_Message_Robust(const char* buffer)
                 printf("ACTION: Cloud invoked 'set_intervention' with status %d\r\n", g_intervention_status);
 
                 printf("ACTION: Executing hardware control...\r\n");
+                /*
                 switch (g_intervention_status)
                 {
                     case 0: printf("ACTION: Turning off all systems.\r\n"); LED1_OFF; LED2_OFF; LED3_OFF; break;
@@ -748,6 +735,7 @@ static void Process_MQTT_Message_Robust(const char* buffer)
                     case 4: printf("ACTION: Activating Fans AND Heaters.\r\n"); LED1_OFF; LED2_ON; LED3_ON; break;
                     default: printf("WARN: Received unknown status %d. Turning off all systems.\r\n", g_intervention_status); LED1_OFF; LED2_OFF; LED3_OFF; break;
                 }
+                */
 
                 reply_sent_successfully = MQTT_Send_Reply(request_id, REPLY_TO_SERVICE_INVOKE, method, 200, "Intervention status updated");
                 // ========================================================
