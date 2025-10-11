@@ -91,6 +91,7 @@ void Handle_Serial_Reception(void);
 
 
 
-void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status);
+//void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status);
+void MQTT_Process_Report_StateMachine(const SystemStatus_t* system_status);
 
 #endif // __ONENET_MQTT_H

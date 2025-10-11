@@ -25,6 +25,7 @@ static char g_json_payload[JSON_PAYLOAD_SIZE];
 static unsigned int g_message_id = 0;
 
 volatile bool g_mqtt_connection_lost_flag = false;
+volatile MqttReportState_t g_mqtt_report_state = REPORT_STATE_IDLE; // 初始化上报状态为空闲
 
 /*
 int g_crop_stage = 0;           // 作物生长时期 (默认为0)
@@ -1047,97 +1048,75 @@ static void MQTT_Publish_Devices_Availability(int sprinklers_available, int fans
      MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
  }
 
-
-
-
-/**
- * @brief 统一上报所有传感器和状态数据
- * @param temp1                 监测点1温度
- * @param temp2                 监测点2温度
- * @param temp3                 监测点3温度
- * @param temp4                 监测点4温度
- * @param ambient_temp          环境温度
- * @param humidity              环境湿度
- * @param pressure              大气压
- * @param wind_speed            风速
- * @param intervention_status   人工干预状态
- * @param XXX_power             功率
- * @param sprinklers_available  喷淋系统是否可用
- * @param fans_available        风机系统是否可用
- * @param heaters_available     加热系统是否可用
- * @note  此函数按顺序调用各个独立的数据上报函数，并在每次调用后加入短暂延时，
- *        以确保模块有足够的时间处理和发送每条消息。
- */
- void MQTT_Publish_All_Data(const DeviceStatus* status)
+ void MQTT_Process_Report_StateMachine(const SystemStatus_t* system_status)
  {
-     printf("INFO: === Begin publishing all data from status struct ===\r\n");
-     // 1. 上报环境数据
-     printf("INFO: Publishing environment data...\r\n");
-     // 使用 -> 操作符通过指针访问结构体成员
-     MQTT_Publish_Environment_Data(status->ambient_temp, status->humidity, status->pressure, status->wind_speed);
-     // 2. 上报四个监测点温度
-     printf("INFO: Publishing point temperatures...\r\n");
-     MQTT_Publish_Only_Temperatures(status->temp1, status->temp2, status->temp3, status->temp4);
-     // 3. 上报人工干预状态
-     printf("INFO: Publishing intervention status...\r\n");
-     MQTT_Publish_Intervention_Status(status->intervention_status);
-     // 4. 上报设备功率
-     printf("INFO: Publishing device powers...\r\n");
-     MQTT_Publish_Device_Powers(status->fan_power, status->heater_power, status->sprinkler_power);
-     // 5. 上报设备可用性
-     printf("INFO: Publishing devices availability...\r\n");
-     MQTT_Publish_Devices_Availability(status->sprinklers_available, status->fans_available, status->heaters_available);
-     printf("INFO: === Finished publishing all data ===\r\n\r\n");
- }
+     // [健壮性检查] 确保传入的指针有效
+     if (system_status == NULL || system_status->env_data == NULL || system_status->capabilities == NULL) {
+         printf("ERROR: Invalid system status pointer passed to State Machine.\r\n");
+         g_mqtt_report_state = REPORT_STATE_IDLE; // 出错则返回空闲
+         return;
+     }
+    // 步骤1: 同步环境传感器数据
+     const EnvironmentalData_t* env = system_status->env_data;
+    g_device_status.temp1 = env->temperatures[0];
+    g_device_status.temp2 = env->temperatures[1];
+    g_device_status.temp3 = env->temperatures[2];
+    g_device_status.temp4 = env->temperatures[3];
+    g_device_status.ambient_temp = env->ambient_temp;
+    g_device_status.humidity = env->humidity;
+    g_device_status.wind_speed = env->wind_speed;
+    g_device_status.pressure = env->pressure;
 
+    // 步骤2: 同步系统决策状态
+    g_device_status.intervention_status = (int)system_status->method;
+    g_device_status.fan_power = system_status->Powers->fan_power;
+    g_device_status.heater_power = system_status->Powers->heater_power;
+    g_device_status.sprinkler_power = system_status->Powers->sprinkler_power;
+    g_device_status.crop_stage = system_status->crop_stage;
 
-/**
- * @brief 处理串口接收的下行消息 (带空闲检测)
- * @note  此函数通过检测串口总线在一定时间内的“空闲”状态，来判断一条消息是否已完整接收。
- *        它应该在主循环中被持续调用。
- */
- /*
- void Handle_Serial_Reception(void)
- {
-     static unsigned int last_recv_num = 0;
-     static uint64_t last_recv_time = 0;
-     const uint32_t recv_idle_timeout_ms = 50; // 定义50毫秒为总线空闲超时
+    // 步骤3: 同步设备可用性
+    const SystemCapabilities_t* caps = system_status->capabilities;
+    g_device_status.sprinklers_available = caps->sprinklers_available;
+    g_device_status.fans_available = caps->fans_available;
+    g_device_status.heaters_available = caps->heaters_available;
  
-     // 检查串口接收缓冲区是否有数据
-     if (xUSART.USART1ReceivedNum > 0)
+     printf("INFO: Processing MQTT Report State: %d\r\n", g_mqtt_report_state);
+ 
+     switch (g_mqtt_report_state)
      {
-         // 如果当前的接收字节数 > 上次记录的字节数，说明有新数据进来
-         if (xUSART.USART1ReceivedNum > last_recv_num)
-         {
-             // 更新“最后一次接收到数据的时间戳”
-             last_recv_time = System_GetTimeMs();
-             // 更新“上次记录的字节数”
-             last_recv_num = xUSART.USART1ReceivedNum;
-         }
-         
-         // 检查“当前时间”与“最后一次接收到数据的时间”之差是否超过了空闲超时阈值
-         // 并且确保接收缓冲区里确实有数据 (last_recv_num > 0)
-         if ((last_recv_num > 0) && (System_GetTimeMs() - last_recv_time > recv_idle_timeout_ms))
-         {
-             // 如果超过了50ms没有新数据进来，我们判定这是一条完整的消息
-             printf("INFO: Full message received after idle period.\r\n");
-             
-             // --- 开始处理 ---
-             // 1. 在数据末尾添加字符串结束符
-             xUSART.USART1ReceivedBuffer[xUSART.USART1ReceivedNum] = '\0';
-             // 2. 调用统一的消息处理函数
-             Process_MQTT_Message_Robust((char*)xUSART.USART1ReceivedBuffer);                
-             
-             // --- 处理完毕后，彻底清零所有状态，为接收下一条消息做准备 ---
-             xUSART.USART1ReceivedNum = 0;
-             last_recv_num = 0;
-         }
+         case REPORT_STATE_SENDING_ENV:
+             MQTT_Publish_Environment_Data(g_device_status.ambient_temp, g_device_status.humidity, g_device_status.pressure, g_device_status.wind_speed);
+             g_mqtt_report_state = REPORT_STATE_SENDING_TEMPS; 
+             break;
+ 
+         case REPORT_STATE_SENDING_TEMPS:
+             MQTT_Publish_Only_Temperatures(g_device_status.temp1, g_device_status.temp2, g_device_status.temp3, g_device_status.temp4);
+             g_mqtt_report_state = REPORT_STATE_SENDING_STATUS; 
+             break;
+ 
+         case REPORT_STATE_SENDING_STATUS:
+             MQTT_Publish_Intervention_Status(g_device_status.intervention_status);
+             g_mqtt_report_state = REPORT_STATE_SENDING_POWERS; 
+             break;
+ 
+         case REPORT_STATE_SENDING_POWERS:
+             MQTT_Publish_Device_Powers(g_device_status.fan_power, g_device_status.heater_power, g_device_status.sprinkler_power);
+             g_mqtt_report_state = REPORT_STATE_SENDING_AVAIL; 
+             break;
+ 
+         case REPORT_STATE_SENDING_AVAIL:
+             MQTT_Publish_Devices_Availability(g_device_status.sprinklers_available, g_device_status.fans_available, g_device_status.heaters_available);
+             g_mqtt_report_state = REPORT_STATE_IDLE; // 全部完成，返回空闲状态
+             printf("INFO: MQTT reporting sequence complete.\r\n");
+             break;
+ 
+         case REPORT_STATE_IDLE:
+         case REPORT_STATE_READY_TO_START:
+         default:
+                // 空闲状态或未知状态，不做任何操作
+             break;
      }
  }
-
-*/
-
-
 
 /**
  * @brief 处理串口接收的下行消息
@@ -1165,51 +1144,6 @@ void Handle_Serial_Reception(void)
         __enable_irq();
     }
 }
-
-
-
- /**
- * @brief  从主程序接收统一的系统状态，并触发MQTT上报
- * @param  system_status: 指向包含所有数据的 SystemStatus_t 结构体的指针
- * @note   此函数负责解包 SystemStatus_t，并将数据同步到模块内部的 g_device_status。
- */
-void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status)
-{
-    // [健壮性检查] 确保传入的指针有效
-    if (system_status == NULL || system_status->env_data == NULL || system_status->capabilities == NULL) {
-        printf("ERROR: Invalid system status pointer passed to MQTT publish function.\r\n");
-        return;
-    }
-
-    // 步骤1: 同步环境传感器数据
-    const EnvironmentalData_t* env = system_status->env_data;
-    g_device_status.temp1 = env->temperatures[0];
-    g_device_status.temp2 = env->temperatures[1];
-    g_device_status.temp3 = env->temperatures[2];
-    g_device_status.temp4 = env->temperatures[3];
-    g_device_status.ambient_temp = env->ambient_temp;
-    g_device_status.humidity = env->humidity;
-    g_device_status.wind_speed = env->wind_speed;
-    g_device_status.pressure = env->pressure;
-
-    // 步骤2: 同步系统决策状态
-    g_device_status.intervention_status = (int)system_status->method;
-    g_device_status.fan_power = system_status->Powers->fan_power;
-    g_device_status.heater_power = system_status->Powers->heater_power;
-    g_device_status.sprinkler_power = system_status->Powers->sprinkler_power;
-    g_device_status.crop_stage = system_status->crop_stage;
-
-    // 步骤3: 同步设备可用性
-    const SystemCapabilities_t* caps = system_status->capabilities;
-    g_device_status.sprinklers_available = caps->sprinklers_available;
-    g_device_status.fans_available = caps->fans_available;
-    g_device_status.heaters_available = caps->heaters_available;
-
-    // 步骤4: 调用内部的上报函数
-    printf("INFO: Unified system status synchronized, starting publish process...\r\n");
-    MQTT_Publish_All_Data(&g_device_status);
-}
-
 
 /**
  * @brief  检查MQTT连接状态，如果断开则自动重连并重新订阅所有主题

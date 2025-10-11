@@ -25,7 +25,7 @@
 
 // ================= [新] 任务调度时间配置 =================
 #define SENSOR_READ_INTERVAL_MS 2000      // 定义传感器读取周期为 2000毫秒
-#define MQTT_REPORT_INTERVAL_MS 15000     // 定义MQTT数据上报周期为 15000毫秒
+#define MQTT_CHUNK_INTERVAL_MS 1200   // 定义MQTT分块上报间隔为 1200毫秒
 #define MQTT_KEEPALIVE_INTERVAL_MS 60000  // 定义MQTT心跳/重连检查周期为 60000毫秒
 // =========================================================
 
@@ -139,7 +139,7 @@ int main()
     
     //4. 定义任务调度的时间戳变量
     uint64_t lastSensorReadTime = 0;
-    uint64_t lastMqttReportTime = 0;
+    uint64_t lastMqttChunkTime = 0;
     uint64_t lastMqttKeepaliveTime = 0;
 
     //声明一个静态变量来存储上一个周期的干预状态
@@ -240,22 +240,25 @@ int main()
             DATA_Flag = 1; // 标记数据已准备好，可以上报
         }
 
-        // --- 任务3: 周期性上报数据到MQTT服务器 ---
-        if (DATA_Flag == 1 && (currentTime - lastMqttReportTime >= MQTT_REPORT_INTERVAL_MS))
+        // --- 任务3: [新] 周期性驱动MQTT上报状态机 ---
+        // 只要状态不是IDLE，就以固定的时间间隔发送下一条数据
+        if (g_mqtt_report_state != REPORT_STATE_IDLE && (currentTime - lastMqttChunkTime >= MQTT_CHUNK_INTERVAL_MS))
         {
-            lastMqttReportTime = currentTime; // 更新上次执行时间
+            lastMqttChunkTime = currentTime; // 更新时间戳
+
+            // 如果是刚准备好，就将状态推进到第一步并立即执行
+            if (g_mqtt_report_state == REPORT_STATE_READY_TO_START) {
+                g_mqtt_report_state = REPORT_STATE_SENDING_ENV;
+            }
             
-            printf("Publishing data to OneNET...\r\n");
+            // 将最新的系统状态数据传递给状态机
             system_status.env_data = &env_data;
             system_status.capabilities = &SysAbilities;
             system_status.method = Intervention_Method;
             system_status.Powers = &powers;
-            system_status.crop_stage = g_device_status.crop_stage; // 使用全局变量
-            
-            MQTT_Publish_All_Data_Adapt(&system_status);
-            
-            DATA_Flag = 0; // 清除标志，等待下一次传感器数据就绪
-            MQTT_Disconnect(); 
+            system_status.crop_stage = g_device_status.crop_stage;
+
+            MQTT_Process_Report_StateMachine(&system_status);
         }
 
         // --- 任务4: 周期性检查MQTT连接状态 ---
