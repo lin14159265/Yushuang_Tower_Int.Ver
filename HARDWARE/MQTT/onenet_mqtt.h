@@ -27,6 +27,18 @@
  ===============================================================================
 */
 
+typedef enum {
+    REPORT_STATE_IDLE = 0,      // 0: 空闲状态，无可上报数据
+    REPORT_STATE_READY_TO_START,// 1: 数据已就绪，准备启动上报序列
+    REPORT_STATE_SENDING_ENV,   // 2: 正在上报环境数据
+    REPORT_STATE_SENDING_TEMPS, // 3: 正在上报四路温度
+    REPORT_STATE_SENDING_STATUS,// 4: 正在上报干预状态
+    REPORT_STATE_SENDING_POWERS,// 5: 正在上报设备功率
+    REPORT_STATE_SENDING_AVAIL  // 6: 正在上报设备可用性
+} MqttReportState_t;
+
+
+
 /**
  * @brief 统一存储所有设备属性的当前状态
  */
@@ -59,7 +71,8 @@ typedef struct {
 
 // 声明一个全局的设备状态实例，供其他文件访问
 extern DeviceStatus g_device_status;
-
+extern volatile bool g_mqtt_connection_lost_flag;
+extern volatile MqttReportState_t g_mqtt_report_state; // 上报状态变量
 
 /*
  ===============================================================================

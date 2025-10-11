@@ -50,8 +50,9 @@ uint8_t high; //模拟高度变量
 uint8_t DATA_Flag = 0;//判断数据是否准备好
 uint8_t en_count;//模拟实现时间计数器
 uint8_t en_count_flag;//模拟时间计数器标志位
-uint8_t g_simulation_tick_flag = 0;
-
+uint8_t g_simulation_tick_flag = 0;//模拟时间标志位
+static uint8_t g_upload_step = 0;
+static DeviceStatus g_status_to_upload;
 
 // 全局环境数据
 EnvironmentalData_t env_data;
@@ -146,10 +147,27 @@ int main()
 
     while (1)
     {
-        //5. 喂狗，表明主循环仍在正常运行
+        //喂狗，表明主循环仍在正常运行
         IWDG_Feed();
 
-        //6. 获取当前系统时间
+        //最高优先级检查: 立即检查MQTT连接丢失标志位
+        if (g_mqtt_connection_lost_flag)
+        {
+            printf("CRITICAL: Main loop detected connection loss flag. Initiating immediate reconnect...\r\n");
+            
+            // 尝试重连
+            MQTT_Check_And_Reconnect();
+            
+            // **关键**: 不论重连是否成功，都必须清除标志位，以避免无限重连循环。
+            // 如果重连失败，下一次通信尝试会再次将它置位。
+            g_mqtt_connection_lost_flag = false;
+            
+            // 跳过本次循环的其余部分，从头开始新的循环。
+            // 这可以防止在刚尝试重连后，立即执行那些依赖网络且可能再次失败的任务。
+            continue; 
+        }
+
+        //获取当前系统时间
         uint64_t currentTime = System_GetTimeMs();
 
         // --- 任务1: 周期性处理串口接收 (非阻塞) ---
@@ -237,6 +255,7 @@ int main()
             MQTT_Publish_All_Data_Adapt(&system_status);
             
             DATA_Flag = 0; // 清除标志，等待下一次传感器数据就绪
+            MQTT_Disconnect(); 
         }
 
         // --- 任务4: 周期性检查MQTT连接状态 ---
@@ -246,7 +265,7 @@ int main()
             MQTT_Check_And_Reconnect(); // 检查并在需要时重连
         }
 
-        // --- 任务5: 环境模拟更新 (保留原有逻辑) ---
+        //任务5: 环境模拟更新
         if(g_simulation_tick_flag == 1)
         {
             en_count_flag = 0;
@@ -285,7 +304,7 @@ void System_CloseAll(void)
     Set_Servo_Angle(0);
 }
 
-// 中断服务函数保持不变...
+// 中断服务函数：处理外部中断线8和9
 void EXTI9_5_IRQHandler(void)
 {
     if(EXTI_GetITStatus(EXTI_Line8) != RESET)

@@ -23,6 +23,9 @@
 static char g_cmd_buffer[CMD_BUFFER_SIZE];
 static char g_json_payload[JSON_PAYLOAD_SIZE]; 
 static unsigned int g_message_id = 0;
+
+volatile bool g_mqtt_connection_lost_flag = false;
+
 /*
 int g_crop_stage = 0;           // 作物生长时期 (默认为0)
 int g_intervention_status = 0;  // 人工干预状态 (默认为0)
@@ -105,6 +108,27 @@ static bool MQTT_Send_AT_Command(const char* cmd, const char* expected_response,
 
 
 
+
+//失败检测包装器函数
+/**
+ * @brief  发送AT指令，并在失败时设置全局重连标志
+ * @param  cmd: 要发送的AT指令字符串。
+ * @param  expected_response: 期望的回复。
+ * @param  timeout_ms: 超时时间。
+ * @return bool: true 代表成功，false 代表失败。
+ */
+static bool MQTT_Send_AT_And_Track_Status(const char* cmd, const char* expected_response, uint32_t timeout_ms)
+{
+    bool success = MQTT_Send_AT_Command(cmd, expected_response, timeout_ms);
+    if (!success)
+    {
+        // 如果发送失败，转换全局标志，主循环会检测到并触发重连
+        printf("FATAL: AT command failed. Flagging for immediate reconnect.\r\n");
+        g_mqtt_connection_lost_flag = true;
+    }
+    return success;
+}
+
 /**
  * @brief 使用同步发送-确认机制，可靠地初始化模块并连接到MQTT服务器
  * @return bool: true 代表所有步骤都成功，false 代表有任何一步失败。
@@ -151,10 +175,10 @@ bool Robust_Initialize_And_Connect_MQTT(void)
  */
 void MQTT_Post_Frost_Alert_Event(float current_temp)
 {
-    char json_payload[256]; 
+    //char json_payload[256]; 
     g_message_id++;
 
-    sprintf(json_payload, 
+    sprintf(g_json_payload, 
         "{\"id\":\"%u\",\"version\":\"1.0\",\"params\":{"
         "\"frost_alert\":{\"value\":{\"current_temp\":%.1f}}"
         "}}",
@@ -165,10 +189,9 @@ void MQTT_Post_Frost_Alert_Event(float current_temp)
     sprintf(g_cmd_buffer, "AT+QMTPUB=0,0,0,0,\"$sys/%s/%s/thing/event/post\",\"%s\"\r\n",
             MQTT_PRODUCT_ID, 
             MQTT_DEVICE_NAME,
-            json_payload);
+            g_json_payload);
 
-    USART1_SendString(g_cmd_buffer);
-    delay_ms(1000);
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000);
 }
 
 
@@ -196,8 +219,7 @@ void MQTT_Get_Desired_Crop_Stage(void)
             MQTT_DEVICE_NAME,
             json_payload);
 
-    USART1_SendString(g_cmd_buffer);
-    delay_ms(1000);
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000);
 }
 
 
@@ -412,7 +434,7 @@ static bool MQTT_Send_Reply(const char* request_id, ReplyType reply_type, const 
              "AT+QMTPUB=0,0,0,0,\"%s\",\"%s\"\r\n",
              reply_topic, clean_json_payload);
 
-    return MQTT_Send_AT_Command(g_cmd_buffer, "OK", 5000);
+    return MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "OK", 5000);
 }
 
 /**
@@ -497,8 +519,7 @@ static bool MQTT_Reply_To_Property_Get_Refactored(const char* request_id, const 
              "AT+QMTPUB=0,0,0,0,\"%s\",\"%s\"\r\n",
              reply_topic, final_json);
 
-    return MQTT_Send_AT_Command(g_cmd_buffer, "OK", 5000);
-
+    return MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "OK", 5000);
 }
 
 /**
@@ -630,10 +651,7 @@ static void Process_MQTT_Message_Robust(const char* buffer)
         printf("DEBUG: Message received, but it has no 'id' field. No reply needed.\r\n");
         return;
     }
-	
 	delay_ms(200); 
-
-    
 
     // --- 判断是哪种命令，并处理 ---
 
@@ -867,10 +885,7 @@ static void MQTT_Publish_Only_Temperatures(float temp1, float temp2, float temp3
             g_json_payload);
 
     // 3. 通过串口发送指令
-    USART1_SendString(g_cmd_buffer);
-
-    // 4. 等待模块处理和发送
-    delay_ms(1100); // 因为报文变短了，延时可以适当缩短
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
 }
 
 
@@ -904,10 +919,7 @@ static void MQTT_Publish_Environment_Data(float ambient_temp, float humidity, fl
             g_json_payload);
 
     // 3. 通过串口发送指令
-    USART1_SendString(g_cmd_buffer);
-
-    // 4. 等待模块处理和发送
-    delay_ms(1100); // 这是一个中等长度的报文，延时1.5秒
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
 }
 
 
@@ -951,11 +963,7 @@ static void MQTT_Publish_Intervention_Status(int intervention_status)
     
 
     // 3. 通过串口发送指令
-    USART1_SendString(g_cmd_buffer);
-    
-
-    // 4. 等待模块处理和发送 (对于短报文，可以适当缩短延时)
-    delay_ms(1100); 
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
 }
 
 
@@ -1002,10 +1010,7 @@ static void MQTT_Publish_Devices_Availability(int sprinklers_available, int fans
             g_json_payload);
 
     // 3. 通过串口发送指令
-    USART1_SendString(g_cmd_buffer);
-
-    // 4. 等待模块处理和发送
-    delay_ms(1100); 
+    MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
 }
 
 
@@ -1039,8 +1044,7 @@ static void MQTT_Publish_Devices_Availability(int sprinklers_available, int fans
              g_json_payload);
  
      // 通过串口发送指令
-     USART1_SendString(g_cmd_buffer);
-     delay_ms(1100); 
+     MQTT_Send_AT_And_Track_Status(g_cmd_buffer, "+QMTPUB: 0,0,0", 5000); 
  }
 
 
@@ -1214,25 +1218,33 @@ void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status)
  */
 bool MQTT_Check_And_Reconnect(void)
 {
-    // 步骤1：发送查询指令 "AT+QMTCONN?" 来获取客户端0的连接状态
-    // 根据Quectel手册，对于已连接的客户端，模块会回复 "+QMTCONN: 0,3"
-    // 如果未连接或状态异常，则不会包含这个特定的回复。
-    if (MQTT_Send_AT_Command("AT+QMTCONN?\r\n", "+QMTCONN: 0,3", 2000))
+    // 1.1 清空串口接收缓冲区，为接收新回复做准备
+    memset(xUSART.USART1ReceivedBuffer, 0, sizeof(xUSART.USART1ReceivedBuffer));
+    xUSART.USART1ReceivedNum = 0;
+
+    // 1.2 发送查询指令
+    USART1_SendString("AT+QMTCONN?\r\n");
+
+    // 1.3 等待一段时间让模块回复 (例如500ms，查询回复很快)
+    delay_ms(500); 
+
+    // 1.4 检查接收缓冲区中是否包含任何一种“已连接”状态
+    if (xUSART.USART1ReceivedNum > 0)
     {
-        // 成功收到了预期的“已连接”回复，说明一切正常，直接返回true
-        printf("DEBUG: MQTT connection is active.\r\n");
-        return true;
-    }
-    // 备用检查：有时模块可能返回 "+QMTCONN: 0,2" 来表示连接已建立
-    // 但为了保险起见，我们也接受这个状态作为“连接正常”的标志
-    if (MQTT_Send_AT_Command("AT+QMTCONN?\r\n", "+QMTCONN: 0,2", 2000))
-    {
-        // 成功收到了预期的“已连接”回复，说明一切正常，直接返回true
-        printf("DEBUG: MQTT connection is active.\r\n");
-        return true;
+        // 确保字符串正确结尾
+        xUSART.USART1ReceivedBuffer[xUSART.USART1ReceivedNum] = '\0'; 
+        
+        // 检查是否包含 "+QMTCONN: 0,3" (已连接) 或 "+QMTCONN: 0,2" (正在连接)
+        // 只要连接存在或正在建立，我们就认为它是活跃的，无需重连
+        if (strstr((char*)xUSART.USART1ReceivedBuffer, "+QMTCONN: 0,3") != NULL || 
+            strstr((char*)xUSART.USART1ReceivedBuffer, "+QMTCONN: 0,2") != NULL)
+        {
+            printf("DEBUG: MQTT connection is active.\r\n");
+            return true;
+        }
     }
 
-    // 步骤2：如果上面的指令失败或超时，说明连接已断开
+    // 步骤2：如果上面的检查失败，说明连接确实已断开
     printf("WARN: MQTT connection lost! Attempting to reconnect...\r\n");
     
     // 步骤3：执行完整的初始化和连接流程
