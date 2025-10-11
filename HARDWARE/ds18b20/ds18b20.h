@@ -11,7 +11,7 @@
 #define DS18B20_PORT_2 GPIOC
 #define DS18B20_PORT_3 GPIOD
 // 定义每个传感器的独立引脚
-#define DS18B20_PIN_0 GPIO_Pin_3
+#define DS18B20_PIN_0 GPIO_Pin_5
 #define DS18B20_PIN_1 GPIO_Pin_0
 #define DS18B20_PIN_2 GPIO_Pin_14
 #define DS18B20_PIN_3 GPIO_Pin_1

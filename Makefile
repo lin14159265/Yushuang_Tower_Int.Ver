@@ -37,15 +37,18 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 HARDWARE/MQTT/onenet_mqtt.c\
+HARDWARE/led/led.c\
+HARDWARE/TFT/tft_driver.c\
+HARDWARE/TFT/tft.c\
+SYSTEM/simulation_model/simulation_model.c\
 HARDWARE/Relay/Relay.c\
 USER/Frost_Detection/Frost_Detection.c\
 HARDWARE/key/key.c\
-HARDWARE/rgb/rgb.c\
 HARDWARE/beep/beep.c\
 HARDWARE/FAN/fan.c\
 HARDWARE/DHT11/dht11.c\
 HARDWARE/ds18b20/ds18b20.c\
-HARDWARE/UART_DISPLAY/bsp_usart.c\
+HARDWARE/UART_DISPLAY/UART_DISPLAY.c\
 HARDWARE/UART_SENSOR/UART_SENSOR.c\
 SYSTEM/wwdg/wwdg.c\
 SYSTEM/iwdg/iwdg.c\
@@ -124,9 +127,11 @@ AS_INCLUDES =
 # C includes
 C_INCLUDES =  \
 -IHARDWARE/MQTT\
+-IHARDWARE/TFT\
+-ISYSTEM/simulation_model\
 -IHARDWARE/Relay\
 -IHARDWARE/key\
--IHARDWARE/rgb\
+-IHARDWARE/led\
 -IHARDWARE/beep\
 -IHARDWARE/FAN\
 -IUSER/Frost_Detection\

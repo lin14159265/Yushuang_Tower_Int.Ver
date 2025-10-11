@@ -8,8 +8,9 @@
  ******************************************************************************
  */
 #include "delay.h"
+#include <stdint.h>
 
-u64 sysTickCnt = 0;                   
+uint64_t sysTickCnt = 0;                   
 
 // 使用 SysTick 实现延时，比较准确
 void delay_us(uint32_t nus)
@@ -84,7 +85,7 @@ void SysTick_Handler(void)
     #endif
 }
 
-u64 System_GetTimeMs(void)
+uint64_t System_GetTimeMs(void)
 {    
     return sysTickCnt  ;
 }

@@ -1,16 +1,13 @@
 #include "UART_SENSOR.h"
 #include <string.h>
 #include "delay.h"
+#include "UART_DISPLAY.h"
 #include "usart.h"
 #include "stdio.h"
 // 485 ModBUS 传感器问询码
 // 格式 [设备地址] [功能码] [起始地址] [数据长度] [CRC16 校验] 低位在前 高位在后
-const unsigned char ASK_SENSOR_CMD[4][8] = {
-	{0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0xC4, 0x0B}, // 温湿度传感器问询码
-	{0x02, 0x03, 0x00, 0x02, 0x00, 0x01, 0x25, 0xF9}, // 二氧化碳传感器问询码
-	{0x03, 0x03, 0x00, 0x06, 0x00, 0x01, 0x65, 0xE9}, // 光照度传感器问询码
-    {0xFF, 0x03, 0x00, 0x00, 0x00, 0x02, 0x1E, 0x24}, // 风速传感器问询码
-};
+const unsigned char ASK_SENSOR_CMD[8] =  {0x01, 0x03, 0x00, 0x00, 0x00, 0x02, 0xC4, 0x0B};// 风速传感器问询码
+
 /****** 风速传感器操作变量 ******/
 extern float	 wind_speed;		// 风速值
 extern uint16_t wind_power;	    // 风力等级
@@ -55,7 +52,7 @@ static void USART3_Init(uint32_t bound)
 	USART_InitStructure.USART_StopBits = USART_StopBits_1;							// 一个停止位
 	USART_InitStructure.USART_Parity = USART_Parity_No;								// 无奇偶校验位
 	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; // 无硬件数据流控制
-	USART_InitStructure.USART_Mode = USART_Mode_Tx | USART_Mode_Rx;					// 收发模式
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;					// 收发模式
 
 	USART_Init(USART3, &USART_InitStructure);	   // 初始化串口3
 	USART_ITConfig(USART3, USART_IT_RXNE, ENABLE); // 开启串口接受中断
@@ -66,6 +63,7 @@ void USART3_SendString(const unsigned char *data, uint8_t len)
 {
 	for(uint16_t i=0; i<len; i++ )
 	{
+		
 		while (USART_GetFlagStatus(USART3, USART_FLAG_TXE) == RESET);
 		USART_SendData(USART3, data[i]);
 	}
@@ -132,7 +130,7 @@ int Get_Humidity_Value(void)
 	switch (Recv_Index)
 	{
 	case 0:
-		if( Recv_Buff[Recv_Index] != 0x01)	// 温湿度传感器数据第1帧必须是 4
+		if( Recv_Buff[Recv_Index] != 0x01)	// 温湿度传感器数据第1帧必须是 1
 			air_receved_flag = FAIL; 
 		else
 			air_receved_flag = BUSY; 
@@ -190,7 +188,7 @@ void Get_Wind_Data(float *speed, uint16_t *power)
         { 	// 如果传感器处于空闲状态，就发命令进行传感器问询
 
             delay_ms(1);
-            USART3_SendString(ASK_SENSOR_CMD[0], 8);
+            USART3_SendString(ASK_SENSOR_CMD, 8);
             air_receved_flag = BUSY;
             busy_count = 0;
             delay_ms(500);	// 为保证485数据正确，最好延时一段时间

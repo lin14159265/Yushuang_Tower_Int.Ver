@@ -1,5 +1,4 @@
 #include "Frost_Detection.h"
-
 #include "stdio.h"
 #include "math.h"
 // 传感器高度数组
@@ -19,9 +18,12 @@ float es_ice(float T)
 
 float calculate_saturation_vapor_pressure(float temperature) 
 {
-    if (temperature >= 0) {
+    if (temperature >= 0) 
+    {
         return es_water(temperature);
-    } else {
+    } 
+    else 
+    {
         return es_ice(temperature);
     }
 }
@@ -58,14 +60,18 @@ float calculate_wet_bulb_temp(float dry_bulb_temp, float relative_humidity, floa
     int max_iterations = 100;
     float tolerance = 0.001;
     
-    for (int i = 0; i < max_iterations; ++i) {
+    for (int i = 0; i < max_iterations; ++i) 
+    {
         float es_wet;
         float derivative;
 
-        if (wet_bulb_temp >= 0) {
+        if (wet_bulb_temp >= 0) 
+        {
             es_wet = es_water(wet_bulb_temp);
             derivative = (A_WATER * B_WATER * es_wet) / ((wet_bulb_temp + B_WATER) * (wet_bulb_temp + B_WATER));
-        } else {
+        } 
+        else 
+        {
             es_wet = es_ice(wet_bulb_temp);
             derivative = (A_ICE * B_ICE * es_wet) / ((wet_bulb_temp + B_ICE) * (wet_bulb_temp + B_ICE));
         }
@@ -73,7 +79,8 @@ float calculate_wet_bulb_temp(float dry_bulb_temp, float relative_humidity, floa
         float f_Tw = es_wet - gamma * (dry_bulb_temp - wet_bulb_temp) - e;
         float f_prime_Tw = derivative + gamma;
 
-        if (fabs(f_prime_Tw) < 1e-9) {
+        if (fabs(f_prime_Tw) < 1e-9) 
+        {
             break; 
         }
 
@@ -121,7 +128,9 @@ InversionLayerInfo_t Analyze_Inversion_Layer(EnvironmentalData_t* env_data)
             max_gradient = fmaxf(max_gradient, gradients[i]);
             total_gradient += gradients[i];
             inversion_count++;
-        } else if (inversion_start != -1) {
+        } 
+        else if (inversion_start != -1) 
+        {
             break; // 逆温层中断
         }
     }
@@ -156,7 +165,7 @@ InterventionMethod_t Determine_Optimal_Intervention(InversionLayerInfo_t* invers
     }
 
     // 2. 判断霜冻类型：是否是适合风扇工作的辐射霜冻条件
-    uint8_t is_radiation_frost_condition = (env_data->wind_speed < WIND_SPEED_NO_INTERVENTION && inversion->is_valid);
+    uint8_t is_radiation_frost_condition = (env_data->wind_speed < (WIND_SPEED_NO_INTERVENTION)  && inversion->is_valid);
 
     // 辐射霜冻策略 (风扇优先)
     // 如果是辐射霜冻条件，并且系统拥有风扇，则优先执行风扇策略
@@ -240,23 +249,104 @@ uint8_t calculate_fan_power(InversionLayerInfo_t* risk_info, float wind_speed)
     float wind_deficit_factor = 1.0f - (wind_speed / WIND_SPEED_NO_INTERVENTION);
     if (wind_deficit_factor < 0.0f) wind_deficit_factor = 0.0f;
     
-    // 修正：使用 FAN_MAX_POWER 作为基准
-    float power_float = FAN_MAX_POWER * inversion_factor * thickness_factor * wind_deficit_factor;
+    // 修正：使用 MAX_POWER 作为基准
+    float power_float = MAX_POWER * inversion_factor * thickness_factor * wind_deficit_factor;
     
     // 只需要应用下限（上限已经由各个因子保证）
-    if (power_float < FAN_MIN_POWER) 
+    if (power_float < MIN_POWER) 
     {
-        power_float = FAN_MIN_POWER;
+        power_float = MIN_POWER;
     }
     
     return (uint8_t)power_float;
 }
 
   
+//模拟加热功率计算   
+uint8_t calculate_heater_power(EnvironmentalData_t* env_data, float critical_temp)
+{
+    float min_temp = env_data->temperatures[0];
+
+    float upper_temp_bound = critical_temp + INTERVENTION_SAFETY_MARGIN;
+    float lower_temp_bound = critical_temp - SEVERE_FROST_MARGIN;
+
+    // 如果温度高于安全区，则因子为0
+    if (min_temp >= upper_temp_bound) 
+    {
+        return 0;
+    }
+
+    // 将当前温度映射到0-1的因子
+    float temp_factor = (upper_temp_bound - min_temp) / (upper_temp_bound - lower_temp_bound);
+    if (temp_factor > 1.0f) temp_factor = 1.0f;
+    if (temp_factor < 0.0f) temp_factor = 0.0f;
+
+    // --- 干燥空气风险因子 (0.5 ~ 1.0) ---
+    // 露点越低，空气越干，辐射降温越快，需要更大功率
+    float dew_point = calculate_dew_point(min_temp, env_data->humidity);
+    float dryness_factor = 1.0f - (dew_point / 10.0f); // 简单线性模型，露点每下降10度，因子增加1
+    if (dryness_factor < 0.5f) dryness_factor = 0.5f; // 最小为0.5，因为湿度大也需要加热
+    if (dryness_factor > 1.5f) dryness_factor = 1.5f; // 设个上限
+
+    // --- 风寒效应因子 (1.0 ~ 2.0) ---
+    // 风越大，热量损失越快，需要更大功率
+    float wind_chill_factor = 1.0f + (env_data->wind_speed / WIND_SPEED_SPRINKLERS_RISKY); // 风速达到洒水风险上限时，因子为2
     
+    // --- 最终功率计算 ---
+    // 基础功率由温度决定，再乘以其他风险因子
+    float power_float = MAX_POWER * temp_factor * dryness_factor * wind_chill_factor;
+
+    // 应用上下限
+    if (power_float > MAX_POWER) power_float = MAX_POWER;
+    
+    // 只有在需要启动时，才应用最小功率
+    if (power_float > 0 && power_float < MIN_POWER) 
+    {
+        power_float = MIN_POWER;
+    }
+
+    return (uint8_t)power_float;
+}
 
 
 
+uint8_t calculate_sprinkler_power(EnvironmentalData_t* env_data, float critical_temp)
+{
+    float min_temp = env_data->temperatures[0];
 
+    // --- 湿球温度危险度因子 (0.0 ~ 1.0) ---
+    // 湿球温度是决定洒水效果的关键
+    float wet_bulb_temp = calculate_wet_bulb_temp(min_temp, env_data->humidity, env_data->pressure);
+    
+    // 如果湿球温度高于临界值，无需洒水
+    if (wet_bulb_temp > critical_temp) 
+    {
+        return 0;
+    }
 
+    // 将湿球温度的危险程度映射到0-1的因子
+    // 假设低于-5°C时达到最大危险
+    const float WET_BULB_DANGER_ZONE = 5.0f; // (critical_temp 到 critical_temp - 5.0)
+    float wb_factor = (critical_temp - wet_bulb_temp) / WET_BULB_DANGER_ZONE;
+    if (wb_factor > 1.0f) wb_factor = 1.0f;
+    if (wb_factor < 0.0f) wb_factor = 0.0f;
+
+    // --- 风速蒸发加剧因子 (1.0 ~ 2.0) ---
+    // 风越大，蒸发越快，需要更大的洒水量来补偿
+    // 高层决策已排除了风速>3.0的风险情况，这里只处理3.0以下的风
+    float wind_factor = 1.0f + (env_data->wind_speed / WIND_SPEED_SPRINKLERS_RISKY);
+
+    // --- 最终功率计算 ---
+    float power_float = MAX_POWER * wb_factor * wind_factor;
+
+    // 应用上下限
+    if (power_float > MAX_POWER) power_float = MAX_POWER;
+
+    if (power_float > 0 && power_float < MIN_POWER) 
+    {
+        power_float = MIN_POWER;
+    }
+    
+    return (uint8_t)power_float;
+}
 

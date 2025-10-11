@@ -4,136 +4,137 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an STM32F103ZET6 microcontroller-based agricultural frost prevention system. The project implements an intelligent frost detection and intervention system that monitors environmental conditions and automatically activates protective measures to prevent crop damage from frost.
+This is an STM32F103ZET6-based frost prevention system called "御霜塔" (Frost Prevention Tower) designed to protect crops from frost damage through intelligent environmental monitoring and intervention. The system uses a multi-layered approach:
 
-## Build System
+- **Sensing Layer**: Multiple temperature sensors at different heights (1-4m), humidity, wind speed, and ambient temperature monitoring
+- **Decision Layer**: Analyzes temperature inversion layers and determines optimal intervention methods
+- **Control Layer**: Controls fans, heaters, and sprinklers based on environmental conditions and crop growth stages
 
-The project uses a Makefile-based build system for ARM Cortex-M3:
+## Build Commands
 
-- **Build**: `make` - Builds main.elf, main.hex, and main.bin files
-- **Clean**: `make clean` - Removes build artifacts
-- **Toolchain**: Uses arm-none-eabi-gcc cross-compiler
-- **Target**: STM32F103ZET6 with High Density device configuration
-- **Build Directory**: `build/` - Contains object files and output binaries
+### Basic Build
+```bash
+make all          # Build complete project (creates .elf, .hex, and .bin files)
+make clean        # Clean build directory
+```
 
-## Hardware Architecture
+### Build Targets
+- Build output directory: `build/`
+- Main target: `main.elf`, `main.hex`, `main.bin`
+- Toolchain: ARM GCC (arm-none-eabi-)
 
-### Core Components
-- **MCU**: STM32F103ZET6 (Cortex-M3, 72MHz)
-- **Memory**: 512KB Flash, 64KB RAM
-- **Communication**: Multiple USART ports for sensors and control
+### Build Configuration
+- Debug mode: Enabled (`DEBUG = 1`)
+- Optimization: `-Og` (debug-friendly optimization)
+- C Standard: C11
+- Character encoding: GBK (for Chinese characters in TFT display)
 
-### Sensor Integration
-- **Temperature**: DS18B20 sensors at 4 different heights (1m, 2m, 3m, 4m)
-- **Humidity**: DHT11 sensor
-- **Wind Speed**: Custom wind sensor via ModBUS protocol
-- **Pressure**: Fixed at 1013.0 hPa (could be enhanced with actual sensor)
-
-### Hardware Control Modules
-- **Fan Control**: PWM-based fan speed control with servo angle adjustment
-- **Water Pump**: Relay-controlled sprinkler system
-- **Heater**: Relay-controlled heating system
-- **Indicators**: RGB LED status lights and buzzer alarms
-- **User Interface**: Push buttons for manual control and height selection
-
-## Software Architecture
+## Architecture
 
 ### Directory Structure
-- **CORE/**: ARM Cortex-M3 core files (CMSIS)
-- **HARDWARE/**: Hardware abstraction modules for sensors and actuators
-- **SYSTEM/**: System-level drivers (delay, USART, timers, watchdogs)
-- **USER/**: Application logic and main firmware
-- **STM32F10x_FWLib/**: STM32 Standard Peripheral Library
+```
+├── USER/                   # Application code and main logic
+│   ├── main.c             # Main application entry point
+│   └── Frost_Detection/   # Frost detection algorithms
+├── HARDWARE/              # Hardware peripheral drivers
+│   ├── MQTT/              # OneNET MQTT communication
+│   ├── TFT/               # Display driver and UI
+│   ├── led/               # LED indicators
+│   ├── key/               # Key inputs
+│   ├── Relay/             # Relay control
+│   ├── FAN/               # Fan and servo control
+│   ├── ds18b20/           # Temperature sensors
+│   ├── DHT11/             # Humidity sensor
+│   └── UART_*/            # UART communication modules
+├── SYSTEM/                # System-level modules
+│   ├── simulation_model/  # Environmental simulation
+│   ├── usart/             # Serial communication
+│   ├── tim/               # Timer management
+│   ├── delay/             # Delay functions
+│   ├── wwdg/              # Window watchdog
+│   └── iwdg/              # Independent watchdog
+├── STM32F10x_FWLib/       # STM32F10x standard peripheral library
+└── CORE/                  # ARM Cortex-M3 core functions
+```
 
-### Key Software Components
+### Key Components
 
-#### Frost Detection System (`USER/Frost_Detection/`)
-- **Environmental Data Analysis**: Reads temperature gradients at multiple heights
-- **Inversion Layer Detection**: Identifies temperature inversion conditions
-- **Intervention Decision Logic**: Determines optimal frost prevention strategy
-- **Crop-Specific Thresholds**: Adjustable critical temperatures based on crop growth stage
+1. **Environmental Data Structure** (`Frost_Detection.h:53-59`)
+   - 4 temperature sensors at different heights
+   - Humidity, ambient temperature, wind speed, pressure
 
-#### Intervention Methods
-- **INTERVENTION_NONE**: No action required
-- **INTERVENTION_SPRINKLERS**: Activates water pump for ice formation protection
-- **INTERVENTION_FANS_ONLY**: Uses fans to mix air layers
-- **INTERVENTION_HEATERS_ONLY**: Activates heating elements
-- **INTERVENTION_FANS_THEN_HEATERS**: Combined approach for severe conditions
+2. **Intervention Methods** (`Frost_Detection.h:72-78`)
+   - Sprinklers: Water-based frost protection
+   - Fans: Air mixing to prevent temperature inversion
+   - Heaters: Direct temperature control
+   - Combined strategies
 
-#### Communication Protocols
-- **USART1**: Debug console (115200 baud)
-- **USART3**: ModBUS sensor communication (9600 baud)
-- **MQTT**: Network communication for remote monitoring (implementation in HARDWARE/MQTT/)
+3. **MQTT Communication** (`onenet_mqtt.h`)
+   - OneNET platform integration
+   - Real-time data reporting
+   - Remote monitoring and control
 
-### Real-time Control
-- **Interrupt Handling**: EXTI interrupts for height selection and system control
-- **Timer Management**: PWM generation for fan and servo control
-- **Watchdog Support**: Both independent (IWDG) and window watchdogs (WWDG)
+4. **TFT Display** (`tft.h`, `tft_driver.h`)
+   - GUI for local monitoring
+   - Chinese character support (GBK encoding)
+   - Real-time data visualization
 
-## Development Workflow
+### Main Control Flow (main.c:131-260)
 
-### Adding New Sensors
-1. Create hardware module in `HARDWARE/` directory
-2. Add source file to Makefile `C_SOURCES` variable
-3. Add include path to Makefile `C_INCLUDES` variable
-4. Implement sensor interface following existing patterns
+1. **Initialization Phase**: Hardware peripherals, sensors, MQTT, display
+2. **Main Loop**:
+   - Read environmental data
+   - Analyze temperature inversion layers
+   - Determine optimal intervention method
+   - Apply control strategies
+   - Update display and MQTT reporting
+   - Environmental simulation updates
 
-### Modifying Intervention Logic
-- Main logic in `USER/main.c:95-178`
-- Frost detection algorithms in `USER/Frost_Detection/Frost_Detection.c`
-- Height-specific temperature analysis in `Frost_Detection.c`
+### Key Algorithms
 
-### Hardware Configuration Changes
-- Pin mappings in respective hardware module files
-- Clock configuration in `SYSTEM/sys/`
-- Peripheral initialization in `USER/main.c:68-91`
+- **Inversion Layer Analysis**: Detects temperature inversions that contribute to frost formation
+- **Intervention Power Calculation**: Dynamic power adjustment based on environmental conditions
+- **Multi-sensor Data Fusion**: Combines data from multiple sensors for accurate assessment
 
-## Key Constants and Configuration
+## Hardware Configuration
 
-### Physical Installation Heights
-- 1m, 2m, 3m, 4m sensor heights defined in `Frost_Detection.h:7-10`
+### Microcontroller
+- STM32F103ZET6 (Cortex-M3, 512KB Flash, 64KB RAM)
+- External oscillator configuration
+- Multiple UART interfaces for different sensors
 
-### Environmental Thresholds
-- Inversion gradient: 0.5°C/m (Frost_Detection.h:27)
-- Wind speed thresholds: 0.5-3.0 m/s range
-- Temperature safety margins: 1.0-2.0°C
+### Sensors
+- DS18B20: Temperature sensors (4 units at different heights)
+- DHT11: Humidity and ambient temperature
+- Wind speed sensor: Via UART communication
+- Pressure sensor: Via ModBUS protocol
 
-### Control Parameters
-- Fan power: 20-80% PWM range
-- Servo angles: Calculated based on optimal intervention height
-- Crop critical temperatures: -3.9°C to -2.3°C based on growth stage
+### Actuators
+- Fans with PWM speed control
+- Servo motor for fan direction control
+- Water pumps for sprinkler system
+- Heaters with power control
+- LED indicators and buzzer for alerts
 
-## Testing and Debugging
+## Development Notes
 
-### Debug Output
-- Uses USART1 for console output
-- Environmental data printed in main loop
-- System status messages via RGB LED and buzzer
+### Character Encoding
+- Project uses GBK encoding for Chinese characters in TFT display
+- Compiler flag: `--exec-charset=GBK`
 
-### Manual Control
-- EXTI8: Height selection (cycles through 0-3)
-- EXTI9: Data acquisition trigger
-- EXTI13: System emergency stop
+### Timing Considerations
+- Main system tick: 300ms (TIM4)
+- Environmental simulation updates
+- MQTT reporting intervals
 
-## Build Configuration
+### Safety Features
+- Independent and window watchdogs
+- System shutdown capability
+- Emergency stop functionality via hardware buttons
 
-### Compiler Flags
-- Target: `-mcpu=cortex-m3 -mthumb`
-- Optimization: `-Og` (debug-friendly)
-- Standard: `-std=c11`
-- Character encoding: `--exec-charset=GBK`
-
-### Linker Script
-- `STM32F103ZETx_FLASH.ld`: Memory layout for STM32F103ZET6
-- Supports 512KB Flash, 64KB RAM
-
-## System Dependencies
-
-### Required Toolchain
-- arm-none-eabi-gcc
-- arm-none-eabi-binutils
-- Make
-
-### External Libraries
-- STM32F10x Standard Peripheral Library
-- CMSIS Core for Cortex-M3
+### Crop Growth Stages
+The system adapts frost protection strategies based on crop growth stages:
+- Tight cluster stage: Critical temperature -3.9°C
+- Full bloom stage: Critical temperature -2.9°C
+- Small fruit stage: Critical temperature -2.3°C
+- Maturation stage: Variable critical temperature

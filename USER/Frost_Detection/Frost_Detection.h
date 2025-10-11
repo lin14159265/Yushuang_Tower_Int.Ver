@@ -11,6 +11,9 @@
 
 #define E0 0.6108      // 0°C时的饱和水汽压 (kPa)
 
+#define pressure_MIN  870.0
+#define pressure_MAX  1083.8
+
 // 水面 (liquid water)
 #define A_WATER 17.27
 #define B_WATER 237.3
@@ -32,10 +35,11 @@
 #define INTERVENTION_SAFETY_MARGIN 1.0f       // 安全边际(°C)
 #define SEVERE_FROST_MARGIN 2.0f              // 严重霜冻边际(°C)
 
-// 风扇功率控制参数
-#define FAN_MIN_POWER        20    // 最小功率 (%)
-#define FAN_MAX_POWER        80    // 最大功率 (%) 
-#define FAN_BASE_POWER       50    // 基础功率 (%)
+//功率控制参数
+#define MIN_POWER        20    // 最小功率 (%)
+#define MAX_POWER        100    // 最大功率 (%) 
+
+
 
 
 // 系统能力配置
@@ -51,7 +55,7 @@ typedef struct {
     float humidity;         // 湿度(%)
     float ambient_temp;     // 环境温度(°C) 
     float wind_speed;       // 风速(m/s)
-    float pressure;         // 大气压(bPa)
+    float pressure;         // 大气压(kPa)
 } EnvironmentalData_t;
 
 // 逆温层信息结构
@@ -73,20 +77,27 @@ typedef enum {
     INTERVENTION_FANS_THEN_HEATERS // 风扇+加热组合
 } InterventionMethod_t;
 
+// 干预功率结构体
+typedef struct {
+    uint8_t fan_power;
+    uint8_t heater_power;
+    uint8_t sprinkler_power;
+} InterventionPowers_t;
 
-/*
- ===============================================================================
-                            【新增】: 统一的系统状态结构体
- ===============================================================================
-*/
-/**
- * @brief 聚合所有需要上传到云平台的系统状态和数据
- */
- typedef struct {
+//作物时期枚举
+typedef enum {
+    STAGE_TIGHT_CLUSTER,             // 紧簇期（花蕾紧密聚集阶段）
+    STAGE_FULL_BLOOM,                // 盛花期（花朵完全开放阶段）
+    STAGE_SMALL_FRUIT,               // 小果期（果实初形成阶段）
+    STAGE_MATURATION                 // 成熟期
+} CROP_CRITICAL_TEMPERATURE;
+
+//统一的系统状态结构体
+typedef struct {
     EnvironmentalData_t* env_data;      // 指向环境数据的指针
     SystemCapabilities_t* capabilities; // 指向系统能力的指针
     InterventionMethod_t method;        // 当前决策的干预方法
-    uint8_t fan_power;                  // 当前计算的风扇功率 (%)
+    InterventionPowers_t* Powers;        // 指向功率的指针
     int crop_stage;                     // 当前作物生长阶段
 } SystemStatus_t;
 
@@ -95,7 +106,10 @@ typedef enum {
 InversionLayerInfo_t Analyze_Inversion_Layer(EnvironmentalData_t* env_data);
 InterventionMethod_t Determine_Optimal_Intervention(InversionLayerInfo_t* inversion, SystemCapabilities_t* capabilities, EnvironmentalData_t* env_data, float critical_temp);
 uint8_t calculate_fan_power(InversionLayerInfo_t* risk_info, float wind_speed);
+uint8_t calculate_heater_power(EnvironmentalData_t* env_data, float critical_temp);
+uint8_t calculate_sprinkler_power(EnvironmentalData_t* env_data, float critical_temp);
 float calculate_optimal_intervention_height(InversionLayerInfo_t* inversion);
+
 #endif
 
 

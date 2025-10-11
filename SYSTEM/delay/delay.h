@@ -12,7 +12,7 @@
 #include "sys.h"
 #include <stdint.h>  // 引入标准整型  
 
-typedef            uint64_t   u64;
+
 
 
 
@@ -21,8 +21,9 @@ void delay_ms(uint32_t nms);
 void delay_us(uint32_t nus);
 
 void System_SysTickInit(void);
-u64 System_GetTimeMs(void);
+uint64_t System_GetTimeMs(void);
 #endif
+
 
 
 
