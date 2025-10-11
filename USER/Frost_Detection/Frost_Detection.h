@@ -11,8 +11,8 @@
 
 #define E0 0.6108      // 0°C时的饱和水汽压 (kPa)
 
-#define pressure_MIN  870.0
-#define pressure_MAX  1083.8
+#define pressure_MIN  870
+#define pressure_MAX  1083
 
 // 水面 (liquid water)
 #define A_WATER 17.27

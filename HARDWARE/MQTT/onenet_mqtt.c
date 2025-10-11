@@ -1067,45 +1067,24 @@ static void MQTT_Publish_Devices_Availability(int sprinklers_available, int fans
  void MQTT_Publish_All_Data(const DeviceStatus* status)
  {
      printf("INFO: === Begin publishing all data from status struct ===\r\n");
- 
      // 1. 上报环境数据
      printf("INFO: Publishing environment data...\r\n");
      // 使用 -> 操作符通过指针访问结构体成员
      MQTT_Publish_Environment_Data(status->ambient_temp, status->humidity, status->pressure, status->wind_speed);
-
-
-     Handle_Serial_Reception();
- 
      // 2. 上报四个监测点温度
      printf("INFO: Publishing point temperatures...\r\n");
      MQTT_Publish_Only_Temperatures(status->temp1, status->temp2, status->temp3, status->temp4);
-
-
-     Handle_Serial_Reception();
- 
      // 3. 上报人工干预状态
      printf("INFO: Publishing intervention status...\r\n");
      MQTT_Publish_Intervention_Status(status->intervention_status);
-
-
-     Handle_Serial_Reception();
- 
      // 4. 上报设备功率
      printf("INFO: Publishing device powers...\r\n");
      MQTT_Publish_Device_Powers(status->fan_power, status->heater_power, status->sprinkler_power);
-
-
-     Handle_Serial_Reception();
- 
      // 5. 上报设备可用性
      printf("INFO: Publishing devices availability...\r\n");
      MQTT_Publish_Devices_Availability(status->sprinklers_available, status->fans_available, status->heaters_available);
-
-     Handle_Serial_Reception();
      printf("INFO: === Finished publishing all data ===\r\n\r\n");
  }
-
-
 
 
 /**
@@ -1244,6 +1223,14 @@ bool MQTT_Check_And_Reconnect(void)
         printf("DEBUG: MQTT connection is active.\r\n");
         return true;
     }
+    // 备用检查：有时模块可能返回 "+QMTCONN: 0,2" 来表示连接已建立
+    // 但为了保险起见，我们也接受这个状态作为“连接正常”的标志
+    if (MQTT_Send_AT_Command("AT+QMTCONN?\r\n", "+QMTCONN: 0,2", 2000))
+    {
+        // 成功收到了预期的“已连接”回复，说明一切正常，直接返回true
+        printf("DEBUG: MQTT connection is active.\r\n");
+        return true;
+    }
 
     // 步骤2：如果上面的指令失败或超时，说明连接已断开
     printf("WARN: MQTT connection lost! Attempting to reconnect...\r\n");
@@ -1270,6 +1257,19 @@ bool MQTT_Check_And_Reconnect(void)
     {
         printf("FATAL: Failed to reconnect to MQTT server. Will try again later.\r\n");
         return false; // 重新连接失败
+    }
+}
+
+void MQTT_Disconnect(void)
+{
+    // 步骤1：发送断开指令 "AT+QMTDISC=0" 来断开客户端0的连接
+    if (MQTT_Send_AT_Command("AT+QMTDISC=0\r\n", "+QMTDISC: 0,0", 2000))
+    {
+        printf("SUCCESS: MQTT connection successfully disconnected.\r\n");
+    }
+    else
+    {
+        printf("ERROR: Failed to disconnect MQTT connection.\r\n");
     }
 }
 

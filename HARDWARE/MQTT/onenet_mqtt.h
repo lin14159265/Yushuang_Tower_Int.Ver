@@ -68,12 +68,15 @@ extern DeviceStatus g_device_status;
 */
 bool Robust_Initialize_And_Connect_MQTT(void);
 bool MQTT_Subscribe_All_Topics(void);
+bool MQTT_Check_And_Reconnect(void);
+void MQTT_Disconnect(void);
+
 void MQTT_Get_Desired_Crop_Stage(void);
 void MQTT_Post_Frost_Alert_Event(float current_temp);
 void MQTT_Publish_All_Data(const DeviceStatus* status);
 void Handle_Serial_Reception(void);
 
-bool MQTT_Check_And_Reconnect(void);
+
 
 void MQTT_Publish_All_Data_Adapt(const SystemStatus_t* system_status);
 
