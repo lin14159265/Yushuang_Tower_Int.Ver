@@ -71,8 +71,9 @@ make clean        # Clean build directory
 
 3. **MQTT Communication** (`onenet_mqtt.h`)
    - OneNET platform integration
+   - State machine-based reporting (chunked data transmission)
+   - Automatic reconnection handling
    - Real-time data reporting
-   - Remote monitoring and control
 
 4. **TFT Display** (`tft.h`, `tft_driver.h`)
    - GUI for local monitoring
@@ -82,31 +83,34 @@ make clean        # Clean build directory
 ### Main Control Flow (main.c:131-260)
 
 1. **Initialization Phase**: Hardware peripherals, sensors, MQTT, display
-2. **Main Loop**:
-   - Read environmental data
-   - Analyze temperature inversion layers
-   - Determine optimal intervention method
-   - Apply control strategies
-   - Update display and MQTT reporting
-   - Environmental simulation updates
+2. **Main Loop** (Priority-based task scheduling):
+   - **Priority 1**: MQTT connection recovery (if lost)
+   - **Task 1**: Handle serial reception (non-blocking)
+   - **Task 2**: Sensor reading (2s interval) → frost detection → intervention decision
+   - **Task 3**: MQTT reporting state machine (1.2s intervals)
+   - **Task 4**: MQTT keepalive checking (60s intervals)
+   - **Task 5**: Environmental simulation updates
+   - **Continuous**: Watchdog feeding (1.6s timeout)
 
 ### Key Algorithms
 
 - **Inversion Layer Analysis**: Detects temperature inversions that contribute to frost formation
 - **Intervention Power Calculation**: Dynamic power adjustment based on environmental conditions
 - **Multi-sensor Data Fusion**: Combines data from multiple sensors for accurate assessment
+- **MQTT State Machine**: Chunked data reporting with automatic reconnection
+- **Priority-based Task Scheduling**: Non-blocking task execution with watchdog maintenance
 
 ## Hardware Configuration
 
 ### Microcontroller
 - STM32F103ZET6 (Cortex-M3, 512KB Flash, 64KB RAM)
 - External oscillator configuration
-- Multiple UART interfaces for different sensors
+- Multiple UART interfaces (USART1/2: 115200, USART3: 9600 for ModBUS)
 
 ### Sensors
-- DS18B20: Temperature sensors (4 units at different heights)
+- DS18B20: Temperature sensors (4 units at 1m, 2m, 3m, 4m heights)
 - DHT11: Humidity and ambient temperature
-- Wind speed sensor: Via UART communication
+- Wind speed sensor: Via UART communication (ModBUS protocol)
 - Pressure sensor: Via ModBUS protocol
 
 ### Actuators
@@ -123,9 +127,11 @@ make clean        # Clean build directory
 - Compiler flag: `--exec-charset=GBK`
 
 ### Timing Considerations
-- Main system tick: 300ms (TIM4)
-- Environmental simulation updates
-- MQTT reporting intervals
+- System tick: 300ms (TIM4)
+- Sensor reading interval: 2000ms
+- MQTT chunk interval: 1200ms
+- MQTT keepalive: 60000ms
+- Watchdog timeout: 1600ms
 
 ### Safety Features
 - Independent and window watchdogs
@@ -138,3 +144,10 @@ The system adapts frost protection strategies based on crop growth stages:
 - Full bloom stage: Critical temperature -2.9°C
 - Small fruit stage: Critical temperature -2.3°C
 - Maturation stage: Variable critical temperature
+
+## Current Development Status
+
+Based on recent git commits, the system has undergone significant improvements:
+- **Latest**: "将上报过程改造为状态机" (Converted reporting process to state machine)
+- **Previous**: Connection loss detection and main.c refactoring
+- **Status**: Functional with ongoing optimizations, MQTT state machine implementation complete

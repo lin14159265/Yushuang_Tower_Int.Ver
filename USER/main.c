@@ -22,6 +22,7 @@
 #include "tft_driver.h"
 #include "onenet_mqtt.h"
 #include "iwdg.h" 
+#include "at24c02.h"
 
 // ================= [新] 任务调度时间配置 =================
 #define SENSOR_READ_INTERVAL_MS 2000      // 定义传感器读取周期为 2000毫秒
@@ -174,7 +175,7 @@ int main()
         Handle_Serial_Reception();
 
         // --- 任务2: 周期性读取传感器数据 ---
-        if (currentTime - lastSensorReadTime >= SENSOR_READ_INTERVAL_MS)
+        if ((currentTime - lastSensorReadTime >= SENSOR_READ_INTERVAL_MS) || (g_mqtt_report_state == REPORT_STATE_READY_TO_START))
         {
             lastSensorReadTime = currentTime; // 更新上次执行时间
             
@@ -237,10 +238,13 @@ int main()
                     break;
             }
 
-            DATA_Flag = 1; // 标记数据已准备好，可以上报
+            if (g_mqtt_report_state == REPORT_STATE_IDLE)
+            {
+                g_mqtt_report_state = REPORT_STATE_READY_TO_START;
+            }
         }
 
-        // --- 任务3: [新] 周期性驱动MQTT上报状态机 ---
+        // --- 任务3:周期性驱动MQTT上报状态机 ---
         // 只要状态不是IDLE，就以固定的时间间隔发送下一条数据
         if (g_mqtt_report_state != REPORT_STATE_IDLE && (currentTime - lastMqttChunkTime >= MQTT_CHUNK_INTERVAL_MS))
         {
@@ -319,7 +323,10 @@ void EXTI9_5_IRQHandler(void)
     
     if(EXTI_GetITStatus(EXTI_Line9) != RESET)
     {
-        DATA_Flag = 1;
+        if(g_mqtt_report_state == REPORT_STATE_IDLE)
+        {
+            g_mqtt_report_state = REPORT_STATE_READY_TO_START; // 标记数据已就绪，准备启动上报序列
+        }
         EXTI_ClearITPendingBit(EXTI_Line9);
     }
 }
@@ -328,8 +335,8 @@ void EXTI15_10_IRQHandler(void)
 {
     if(EXTI_GetITStatus(EXTI_Line13) != RESET)
     {
-        DATA_Flag = 0;
         System_CloseAll();
+        g_mqtt_report_state = REPORT_STATE_IDLE;
         EXTI_ClearITPendingBit(EXTI_Line13);
     }
 }

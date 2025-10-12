@@ -36,6 +36,7 @@ BUILD_DIR = build
 ######################################
 # C sources
 C_SOURCES =  \
+HARDWARE/at24c02/at24c02.c\
 HARDWARE/MQTT/onenet_mqtt.c\
 HARDWARE/led/led.c\
 HARDWARE/TFT/tft_driver.c\
