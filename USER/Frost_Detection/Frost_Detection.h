@@ -55,7 +55,7 @@ typedef struct {
     float humidity;         // 湿度(%)
     float ambient_temp;     // 环境温度(°C) 
     float wind_speed;       // 风速(m/s)
-    float pressure;         // 大气压(kPa)
+    int pressure;         // 大气压(bPa)
 } EnvironmentalData_t;
 
 // 逆温层信息结构
